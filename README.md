@@ -36,12 +36,20 @@ Jobs in the crontab are tagged with a comment at the end of the line:
 
 ## Setup
 
-### Step 1 — Deploy scripts to both servers
+### Step 1 — Deploy scripts to each server
+
+Log into each server individually and clone the repo:
+
 ```bash
-scp *.sh root@dc-server:/usr/local/bin/
-scp *.sh root@dr-server:/usr/local/bin/
-ssh root@dc-server "chmod +x /usr/local/bin/*.sh"
-ssh root@dr-server "chmod +x /usr/local/bin/*.sh"
+# Run this on each server (DC and DR separately):
+git clone https://github.com/aloysiuspattath/cronman.git /tmp/cronman
+cp /tmp/cronman/*.sh /usr/local/bin/
+chmod +x /usr/local/bin/make_primary.sh \
+         /usr/local/bin/make_standby.sh \
+         /usr/local/bin/cron_role_manager.sh \
+         /usr/local/bin/cron_backup.sh \
+         /usr/local/bin/cron_restore.sh \
+         /usr/local/bin/cron_audit.sh
 ```
 
 ### Step 2 — Set the initial role on each server
