@@ -72,14 +72,21 @@ HOSTNAME=$(hostname)
 log "Server: $HOSTNAME | Role: $ROLE"
 
 # --- Status mode ---
-if [ "$STATUS_ONLY" = true ]; then
-    echo ""
-    echo "=========================================="
-    echo "  Cron Job Status on: $HOSTNAME"
-    echo "  Current Role      : $ROLE"
-    echo "=========================================="
-    echo ""
-    crontab -l 2>/dev/null | awk '
+show_user_status() {
+    local target_user="$1"
+    local crontab_content
+    crontab_content=$(crontab -u "$target_user" -l 2>/dev/null)
+    if [ -z "$crontab_content" ]; then
+        return
+    fi
+    
+    # Check if there are any managed tags
+    if ! echo "$crontab_content" | grep -qE '#ALWAYS|#PRIMARY'; then
+        return
+    fi
+    
+    echo "  --- [ $target_user ] ---"
+    echo "$crontab_content" | awk '
         /#ALWAYS/  { gsub(/^####/, ""); print "  [ALWAYS  ] " $0 }
         /#PRIMARY/ {
             if (/^####/) {
@@ -91,73 +98,112 @@ if [ "$STATUS_ONLY" = true ]; then
         }
     '
     echo ""
+}
+
+if [ "$STATUS_ONLY" = true ]; then
+    echo ""
+    echo "=========================================="
+    echo "  Cron Job Status on: $HOSTNAME"
+    echo "  Current Role      : $ROLE"
+    echo "=========================================="
+    echo ""
+    
+    if [ "$(id -u)" -eq 0 ]; then
+        show_user_status "root"
+        USER_LIST=$(awk -F: '\''$7 !~ /nologin|false|sync|halt|shutdown/ && $3 >= 0 && $1 != "root" { print $1 }'\'' /etc/passwd)
+        for SYSTEM_USER in $USER_LIST; do
+            show_user_status "$SYSTEM_USER"
+        done
+    else
+        show_user_status "$(whoami)"
+    fi
     exit 0
 fi
 
-# --- Dump current crontab ---
-crontab -l > "$TMPFILE" 2>/dev/null
-if [ $? -ne 0 ]; then
-    log "WARNING: No existing crontab found for user $(whoami). Starting fresh."
-    > "$TMPFILE"
-fi
-
-# --- Apply role logic ---
-#
+# --- Process User Function ---
 # SAFETY RULES for sed patterns:
 #   1. Only lines containing the EXACT token '#PRIMARY' are ever matched.
 #   2. Lines with #ALWAYS, plain comments, untagged jobs — completely untouched.
 #   3. Already-disabled lines (####) are never double-commented.
 #   4. Already-enabled lines are never double-enabled.
-#
-# Pattern breakdown:
-#   Enable  : ^#### then anything then literal '#PRIMARY' at end of line
-#   Disable : line must NOT start with # (so no plain comments)
-#             then anything then literal '#PRIMARY' at end of line
-
-if [ "$ROLE" = "PRIMARY" ]; then
-    log "Enabling all #PRIMARY jobs..."
-
-    # Show lines that WILL be changed (for audit trail)
-    WILL_CHANGE=$(grep -c '^####.*#PRIMARY[[:space:]]*$' "$TMPFILE" 2>/dev/null || echo 0)
-    log "Lines to enable: $WILL_CHANGE"
-
-    # Remove #### only from lines that:
-    #   - Start with ####
-    #   - Contain #PRIMARY (exact, at end of line, optional trailing space)
-    sed "s/^####\(.*#PRIMARY[[:space:]]*\)$/\1/" "$TMPFILE" > "${TMPFILE}.new"
-    mv "${TMPFILE}.new" "$TMPFILE"
-
-elif [ "$ROLE" = "STANDBY" ]; then
-    log "Disabling all #PRIMARY jobs..."
-
-    # Show lines that WILL be changed (for audit trail)
-    WILL_CHANGE=$(grep -c '^[^#].*#PRIMARY[[:space:]]*$' "$TMPFILE" 2>/dev/null || echo 0)
-    log "Lines to disable: $WILL_CHANGE"
-
-    # Add #### only to lines that:
-    #   - Do NOT start with # (skips already-commented and plain comment lines)
-    #   - Contain #PRIMARY (exact, at end of line, optional trailing space)
-    sed "s/^\([^#].*#PRIMARY[[:space:]]*\)$/####\1/" "$TMPFILE" > "${TMPFILE}.new"
-    mv "${TMPFILE}.new" "$TMPFILE"
-fi
-
-# --- Apply or preview ---
-if [ "$DRY_RUN" = true ]; then
-    log "DRY-RUN MODE: Changes NOT applied. Preview of new crontab:"
-    echo "-----------------------------------------------------------"
-    cat "$TMPFILE"
-    echo "-----------------------------------------------------------"
-else
-    crontab "$TMPFILE"
-    if [ $? -eq 0 ]; then
-        log "Crontab updated successfully."
-    else
-        log "ERROR: Failed to apply crontab. Manual review required: $TMPFILE"
-        exit 1
+process_user() {
+    local target_user="$1"
+    local user_tmpfile="${TMPFILE}_${target_user}"
+    
+    # Dump current crontab
+    crontab -u "$target_user" -l > "$user_tmpfile" 2>/dev/null
+    if [ $? -ne 0 ] || [ ! -s "$user_tmpfile" ]; then
+        # Crontab is empty or does not exist
+        rm -f "$user_tmpfile"
+        return
     fi
+
+    # Check if there are any #PRIMARY tags to process
+    if ! grep -q '#PRIMARY' "$user_tmpfile"; then
+        rm -f "$user_tmpfile"
+        return
+    fi
+
+    log "Processing crontab for user: $target_user"
+
+    # Apply role logic
+    local WILL_CHANGE=0
+    if [ "$ROLE" = "PRIMARY" ]; then
+        WILL_CHANGE=$(grep -c '^####.*#PRIMARY[[:space:]]*$' "$user_tmpfile" 2>/dev/null || echo 0)
+        if [ "$WILL_CHANGE" -gt 0 ]; then
+            log "  Lines to enable: $WILL_CHANGE"
+            sed "s/^####\(.*#PRIMARY[[:space:]]*\)$/\1/" "$user_tmpfile" > "${user_tmpfile}.new"
+            mv "${user_tmpfile}.new" "$user_tmpfile"
+        fi
+    elif [ "$ROLE" = "STANDBY" ]; then
+        WILL_CHANGE=$(grep -c '^[^#].*#PRIMARY[[:space:]]*$' "$user_tmpfile" 2>/dev/null || echo 0)
+        if [ "$WILL_CHANGE" -gt 0 ]; then
+            log "  Lines to disable: $WILL_CHANGE"
+            sed "s/^\([^#].*#PRIMARY[[:space:]]*\)$/####\1/" "$user_tmpfile" > "${user_tmpfile}.new"
+            mv "${user_tmpfile}.new" "$user_tmpfile"
+        fi
+    fi
+
+    # Apply or preview
+    if [ "$WILL_CHANGE" -eq 0 ]; then
+        log "  No changes required for $target_user."
+    elif [ "$DRY_RUN" = true ]; then
+        log "  DRY-RUN MODE: Changes NOT applied for $target_user. Preview:"
+        echo "  --- [ $target_user ] ----------------------------------------"
+        cat "$user_tmpfile"
+        echo "  -----------------------------------------------------------"
+    else
+        crontab -u "$target_user" "$user_tmpfile"
+        if [ $? -eq 0 ]; then
+            log "  Crontab updated successfully for $target_user."
+        else
+            log "  ERROR: Failed to apply crontab for $target_user. Review: $user_tmpfile"
+            return
+        fi
+    fi
+
+    rm -f "$user_tmpfile"
+}
+
+# --- Execution ---
+if [ "$(id -u)" -eq 0 ]; then
+    log "Running as root. Processing all valid users..."
+    # Explicitly process root first
+    process_user "root"
+    
+    # Process all other system users with a valid shell/uid
+    USER_LIST=$(awk -F: '$7 !~ /nologin|false|sync|halt|shutdown/ && $3 >= 0 && $1 != "root" { print $1 }' /etc/passwd)
+    for SYSTEM_USER in $USER_LIST; do
+        process_user "$SYSTEM_USER"
+    done
+else
+    # Running as a normal user
+    CURRENT_USER=$(whoami)
+    log "Running as $CURRENT_USER. Updating personal crontab only."
+    process_user "$CURRENT_USER"
 fi
 
 # --- Cleanup ---
-rm -f "$TMPFILE"
+rm -f "${TMPFILE}"*
 log "Done."
 exit 0

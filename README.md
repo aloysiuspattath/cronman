@@ -19,6 +19,12 @@ Jobs in the crontab are tagged with a comment at the end of the line:
 ```
 **When a server becomes PRIMARY**, `####` is removed and the job runs again.
 
+### Multi-User Support
+
+When the scripts (`make_primary.sh`, `make_standby.sh`, or `cron_role_manager.sh`) are executed as **root** (via `sudo`), they automatically discover all valid user profiles on the system and apply crontab updates or check statuses for **all** users in a single sweep.
+
+If executed by a standard, non-root user, the scripts securely restrict their modifications and checks to only that specific user's crontab.
+
 ---
 
 ## Files
