@@ -81,7 +81,7 @@ show_user_status() {
     fi
     
     # Check if there are any managed tags
-    if ! echo "$crontab_content" | grep -iE '#ALWAYS|#PRIMARY' >/dev/null 2>&1; then
+    if ! echo "$crontab_content" | awk 'tolower($0) ~ /#(always|primary)/ {found=1; exit} END {if(found) exit 0; else exit 1}'; then
         return
     fi
     
@@ -139,7 +139,8 @@ process_user() {
     fi
 
     # Check if there are any #PRIMARY tags to process
-    if ! grep -i '#PRIMARY' "$user_tmpfile" >/dev/null 2>&1; then
+    local P_TAG="#[Pp][Rr][Ii][Mm][Aa][Rr][Yy]"
+    if ! grep "${P_TAG}" "$user_tmpfile" >/dev/null 2>&1; then
         rm -f "$user_tmpfile"
         return
     fi
@@ -148,22 +149,21 @@ process_user() {
 
     # Apply role logic
     local WILL_CHANGE=0
-    # AIX compatibility: case-insensitive #PRIMARY match and literal space/tab instead of POSIX [[:space:]]
-    local P_TAG="#[Pp][Rr][Ii][Mm][Aa][Rr][Yy]"
-    local SP="[ 	]"
     
+    # AIX compatibility: simple regex without $ anchors to handle \r
+    # and sed addressing instead of capture groups \1
     if [ "$ROLE" = "PRIMARY" ]; then
-        WILL_CHANGE=$(grep -c "^####.*${P_TAG}${SP}*$" "$user_tmpfile" 2>/dev/null || echo 0)
+        WILL_CHANGE=$(grep -c "^####.*${P_TAG}" "$user_tmpfile" 2>/dev/null || echo 0)
         if [ "$WILL_CHANGE" -gt 0 ]; then
             log "  Lines to enable: $WILL_CHANGE"
-            sed "s/^####\(.*${P_TAG}${SP}*\)$/\1/" "$user_tmpfile" > "${user_tmpfile}.new"
+            sed "/^####.*${P_TAG}/ s/^####//" "$user_tmpfile" > "${user_tmpfile}.new"
             mv "${user_tmpfile}.new" "$user_tmpfile"
         fi
     elif [ "$ROLE" = "STANDBY" ]; then
-        WILL_CHANGE=$(grep -c "^[^#].*${P_TAG}${SP}*$" "$user_tmpfile" 2>/dev/null || echo 0)
+        WILL_CHANGE=$(grep -c "^[^#].*${P_TAG}" "$user_tmpfile" 2>/dev/null || echo 0)
         if [ "$WILL_CHANGE" -gt 0 ]; then
             log "  Lines to disable: $WILL_CHANGE"
-            sed "s/^\([^#].*${P_TAG}${SP}*\)$/####\1/" "$user_tmpfile" > "${user_tmpfile}.new"
+            sed "/^[^#].*${P_TAG}/ s/^/####/" "$user_tmpfile" > "${user_tmpfile}.new"
             mv "${user_tmpfile}.new" "$user_tmpfile"
         fi
     fi
