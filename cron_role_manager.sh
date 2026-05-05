@@ -71,11 +71,23 @@ fi
 HOSTNAME=$(hostname)
 log "Server: $HOSTNAME | Role: $ROLE"
 
+# --- Helpers ---
+get_crontab() {
+    local target_user="$1"
+    if [ "$(id -un)" = "$target_user" ]; then
+        crontab -l 2>/dev/null
+    elif [ "$(uname)" = "AIX" ]; then
+        crontab -l "$target_user" 2>/dev/null || su - "$target_user" -c "crontab -l" 2>/dev/null
+    else
+        crontab -u "$target_user" -l 2>/dev/null || su - "$target_user" -c "crontab -l" 2>/dev/null
+    fi
+}
+
 # --- Status mode ---
 show_user_status() {
     local target_user="$1"
     local crontab_content
-    crontab_content=$(crontab -u "$target_user" -l 2>/dev/null)
+    crontab_content=$(get_crontab "$target_user")
     if [ -z "$crontab_content" ]; then
         return
     fi
@@ -131,8 +143,8 @@ process_user() {
     local user_tmpfile="${TMPFILE}_${target_user}"
     
     # Dump current crontab
-    crontab -u "$target_user" -l > "$user_tmpfile" 2>/dev/null
-    if [ $? -ne 0 ] || [ ! -s "$user_tmpfile" ]; then
+    get_crontab "$target_user" > "$user_tmpfile"
+    if [ ! -s "$user_tmpfile" ]; then
         # Crontab is empty or does not exist
         rm -f "$user_tmpfile"
         return
