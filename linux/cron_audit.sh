@@ -61,8 +61,8 @@ audit_user() {
     local active=0 disabled=0
 
     # Count #PRIMARY tagged jobs only
-    active=$(echo "$cron_content"   | grep '#PRIMARY' | grep -cv '^####')
-    disabled=$(echo "$cron_content" | grep '#PRIMARY' | grep -c '^####')
+    active=$(echo "$cron_content"   | grep -i '#PRIMARY' | grep -cv '^####')
+    disabled=$(echo "$cron_content" | grep -i '#PRIMARY' | grep -c '^####')
 
     TOTAL_ACTIVE=$((TOTAL_ACTIVE + active))
     TOTAL_DISABLED=$((TOTAL_DISABLED + disabled))
