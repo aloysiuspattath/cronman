@@ -22,8 +22,8 @@
 
 ROLE_FILE="/etc/server_role"
 LOG_FILE="/var/log/dr_switchover.log"
-CRON_MANAGER="/usr/local/bin/cron_role_manager.sh"
-BACKUP_SCRIPT="/usr/local/bin/cron_backup.sh"
+CRON_MANAGER="/home/pimadmin/aloysius/cron_role_manager.sh"
+BACKUP_SCRIPT="/home/pimadmin/aloysius/cron_backup.sh"
 DRY_RUN=false
 NEW_ROLE="STANDBY"
 
