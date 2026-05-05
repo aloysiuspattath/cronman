@@ -22,7 +22,12 @@
 
 ROLE_FILE="/etc/server_role"
 LOG_FILE="/var/log/dr_switchover.log"
-CRON_MANAGER="/usr/local/bin/cron_role_manager.sh"
+
+if [ "$(uname)" = "AIX" ]; then
+    CRON_MANAGER="/usr/local/bin/cron_role_manager_aix.sh"
+else
+    CRON_MANAGER="/usr/local/bin/cron_role_manager.sh"
+fi
 BACKUP_SCRIPT="/usr/local/bin/cron_backup.sh"
 DRY_RUN=false
 NEW_ROLE="PRIMARY"
@@ -62,7 +67,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 if [ ! -f "$CRON_MANAGER" ]; then
-    log "ERROR: $CRON_MANAGER not found. Deploy cron_role_manager.sh first."
+    log "ERROR: $CRON_MANAGER not found. Deploy the correct cron_role_manager script first."
     exit 1
 fi
 
@@ -96,7 +101,7 @@ fi
 log "Step 3: Enabling #PRIMARY cron jobs..."
 "$CRON_MANAGER"
 if [ $? -ne 0 ]; then
-    log "ERROR: cron_role_manager.sh failed."
+    log "ERROR: $CRON_MANAGER failed."
     log "       Restore crontabs manually from: $BACKUP_DIR"
     exit 1
 fi
