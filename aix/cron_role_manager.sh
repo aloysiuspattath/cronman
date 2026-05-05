@@ -82,7 +82,7 @@ show_user_status() {
     fi
     
     # Check if there are any managed tags
-    if ! echo "$crontab_content" | awk 'tolower($0) ~ /#(always|primary)/ {found=1; exit} END {if(found) exit 0; else exit 1}'; then
+    if ! echo "$crontab_content" | awk 'tolower($0) ~ /#always/ || tolower($0) ~ /#primary/ {found=1; exit} END {if(found) exit 0; else exit 1}'; then
         return
     fi
     

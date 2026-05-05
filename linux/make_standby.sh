@@ -22,12 +22,7 @@
 
 ROLE_FILE="/etc/server_role"
 LOG_FILE="/var/log/dr_switchover.log"
-
-if [ "$(uname)" = "AIX" ]; then
-    CRON_MANAGER="/usr/local/bin/cron_role_manager_aix.sh"
-else
-    CRON_MANAGER="/usr/local/bin/cron_role_manager.sh"
-fi
+CRON_MANAGER="/usr/local/bin/cron_role_manager.sh"
 BACKUP_SCRIPT="/usr/local/bin/cron_backup.sh"
 DRY_RUN=false
 NEW_ROLE="STANDBY"
