@@ -97,32 +97,9 @@ show_user_status() {
     echo ""
 }
 
-# --- Find valid users via spool ---
-get_spool_users() {
-    local spool_dir=""
-    if [ -d "/var/spool/cron/crontabs" ]; then
-        spool_dir="/var/spool/cron/crontabs"
-    elif [ -d "/var/spool/cron/tabs" ]; then
-        spool_dir="/var/spool/cron/tabs"
-    elif [ -d "/var/spool/cron" ]; then
-        spool_dir="/var/spool/cron"
-    fi
-
-    if [ -n "$spool_dir" ] && [ -r "$spool_dir" ]; then
-        for f in "$spool_dir"/*; do
-            [ -e "$f" ] || continue
-            [ -f "$f" ] || continue
-            local fname=$(basename "$f")
-            # Skip hidden files or backups
-            case "$fname" in
-                .*|*~|*.bak) continue ;;
-            esac
-            echo "$fname"
-        done
-    else
-        # Fallback to passwd if spool is unreadable
-        awk -F: '$7 !~ /nologin|false|sync|halt|shutdown/ && $3 >= 0 { print $1 }' /etc/passwd
-    fi
+# --- Find valid users via passwd ---
+get_valid_users() {
+    awk -F: '$7 !~ /nologin|false|sync|halt|shutdown/ && $3 >= 0 { print $1 }' /etc/passwd
 }
 
 if [ "$STATUS_ONLY" = true ]; then
@@ -134,7 +111,7 @@ if [ "$STATUS_ONLY" = true ]; then
     echo ""
     
     if [ "$(id -u)" -eq 0 ]; then
-        USER_LIST=$(get_spool_users | sort -u)
+        USER_LIST=$(get_valid_users | sort -u)
         for SYSTEM_USER in $USER_LIST; do
             show_user_status "$SYSTEM_USER"
         done
@@ -209,7 +186,7 @@ process_user() {
 # --- Execution ---
 if [ "$(id -u)" -eq 0 ]; then
     log "Running as root. Discovering users with active crontabs..."
-    USER_LIST=$(get_spool_users | sort -u)
+    USER_LIST=$(get_valid_users | sort -u)
     for SYSTEM_USER in $USER_LIST; do
         process_user "$SYSTEM_USER"
     done
