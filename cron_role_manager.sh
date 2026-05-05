@@ -77,9 +77,9 @@ get_crontab() {
     if [ "$(id -un)" = "$target_user" ]; then
         crontab -l 2>/dev/null
     elif [ "$(uname)" = "AIX" ]; then
-        crontab -l "$target_user" 2>/dev/null || su - "$target_user" -c "crontab -l" 2>/dev/null
+        crontab -l "$target_user" 2>/dev/null
     else
-        crontab -u "$target_user" -l 2>/dev/null || su - "$target_user" -c "crontab -l" 2>/dev/null
+        crontab -u "$target_user" -l 2>/dev/null
     fi
 }
 
@@ -195,7 +195,8 @@ process_user() {
         else
             # AIX fallback: AIX crontab does not support -u with file
             chown "$target_user" "$user_tmpfile"
-            if su - "$target_user" -c "crontab $user_tmpfile" >/dev/null 2>&1; then
+            # Use 'su' without '-' to avoid executing interactive .profile scripts which can hang
+            if su "$target_user" -c "crontab $user_tmpfile" >/dev/null 2>&1; then
                 log "  Crontab updated successfully for $target_user."
             else
                 log "  ERROR: Failed to apply crontab for $target_user. Review: $user_tmpfile"
