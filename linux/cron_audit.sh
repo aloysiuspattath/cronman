@@ -35,7 +35,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 ROLE_FILE="/etc/server_role"
-ROLE=$(cat "$ROLE_FILE" 2>/dev/null | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+ROLE=$(tr -d '[:space:]' < "$ROLE_FILE" 2>/dev/null | tr '[:lower:]' '[:upper:]')
 HOSTNAME=$(hostname)
 
 TOTAL_ACTIVE=0
@@ -73,7 +73,7 @@ audit_user() {
     echo ""
     echo "  ── User: $user ─────────────────────────────────────────"
     echo "$cron_content" | awk '
-        /#PRIMARY/ {
+        tolower($0) ~ /#primary/ {
             if (/^####/) {
                 line = $0; sub(/^####/, "", line)
                 printf "    \033[31m[DISABLED]\033[0m %s\n", line
@@ -99,9 +99,9 @@ audit_user() {
             echo "        Run as root to audit all users."
             audit_user "$(whoami)"
         else
-            USER_LIST=$(cat /etc/passwd | awk -F: '
+            USER_LIST=$(awk -F: '
                 $7 !~ /nologin|false|sync|halt|shutdown/ && $3 >= 0 { print $1 }
-            ')
+            ' /etc/passwd)
             for USER in $USER_LIST; do
                 audit_user "$USER"
             done

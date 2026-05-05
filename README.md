@@ -175,7 +175,7 @@ Each backup contains:
 
 - AIX uses `/var/spool/cron/crontabs/` — `cron_backup.sh` handles this automatically
 - `sed -i` is not available on AIX — all scripts use the portable `sed + temp file` approach
-- `crontab -u <user>` works the same on AIX as Linux
+- AIX `crontab` uses positional syntax (`crontab -l username`) instead of `-u` flag — the AIX scripts handle this automatically
 
 ---
 

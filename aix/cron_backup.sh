@@ -87,11 +87,13 @@ SKIPPED=0
 for USER in $USER_LIST; do
     if [ "$(id -un)" = "$USER" ]; then
         CRON_CONTENT=$(crontab -l 2>/dev/null)
+        cron_rc=$?
     else
         CRON_CONTENT=$(crontab -l "$USER" 2>/dev/null)
+        cron_rc=$?
     fi
-    
-    if [ $? -eq 0 ] && [ -n "$CRON_CONTENT" ]; then
+
+    if [ $cron_rc -eq 0 ] && [ -n "$CRON_CONTENT" ]; then
         echo "$CRON_CONTENT" > "$BACKUP_DIR/user_${USER}.cron"
         log "  Backed up crontab for user: $USER"
         BACKED_UP=$((BACKED_UP + 1))

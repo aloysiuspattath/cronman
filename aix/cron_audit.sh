@@ -22,7 +22,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 ROLE_FILE="/etc/server_role"
-ROLE=$(cat "$ROLE_FILE" 2>/dev/null | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+ROLE=$(tr -d '[:space:]' < "$ROLE_FILE" 2>/dev/null | tr '[:lower:]' '[:upper:]')
 HOSTNAME=$(hostname)
 
 TOTAL_ACTIVE=0

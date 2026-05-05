@@ -17,13 +17,14 @@
 #   sudo ./make_standby.sh            # apply
 #   sudo ./make_standby.sh --dry-run  # preview without changing anything
 #
-# SUPPORTS: Linux and AIX
+# SUPPORTS: Linux
 # =============================================================================
 
 ROLE_FILE="/etc/server_role"
 LOG_FILE="/var/log/dr_switchover.log"
-CRON_MANAGER="/home/pimadmin/aloysius/cron_role_manager.sh"
-BACKUP_SCRIPT="/home/pimadmin/aloysius/cron_backup.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CRON_MANAGER="${SCRIPT_DIR}/cron_role_manager.sh"
+BACKUP_SCRIPT="${SCRIPT_DIR}/cron_backup.sh"
 DRY_RUN=false
 NEW_ROLE="STANDBY"
 
@@ -69,8 +70,15 @@ fi
 # --- Dry-run mode ---
 if [ "$DRY_RUN" = true ]; then
     log "DRY-RUN: Would set role to STANDBY. Preview of cron changes:"
+    ORIGINAL_ROLE=$(cat "$ROLE_FILE" 2>/dev/null)
     echo "$NEW_ROLE" > "$ROLE_FILE"
     "$CRON_MANAGER" --dry-run
+    # Restore original role after preview
+    if [ -n "$ORIGINAL_ROLE" ]; then
+        echo "$ORIGINAL_ROLE" > "$ROLE_FILE"
+    else
+        rm -f "$ROLE_FILE"
+    fi
     exit 0
 fi
 

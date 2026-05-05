@@ -14,7 +14,7 @@
 #   ./cron_backup.sh --list               # list available backups
 #
 # NOTE: Must be run as root to read all users' crontabs
-# SUPPORTS: Linux and AIX
+# SUPPORTS: Linux
 # =============================================================================
 
 BACKUP_BASE="/var/backups/cron_dr"
@@ -76,9 +76,9 @@ echo "OS: $(uname -s)" >> "$BACKUP_DIR/metadata.txt"
 log "Backing up user crontabs..."
 
 # Get all users who have a valid login shell (works on Linux and AIX)
-USER_LIST=$(cat /etc/passwd | awk -F: '
+USER_LIST=$(awk -F: '
     $7 !~ /nologin|false|sync|halt|shutdown/ && $3 >= 0 { print $1 }
-')
+' /etc/passwd)
 
 BACKED_UP=0
 SKIPPED=0

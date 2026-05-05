@@ -28,6 +28,7 @@ LOG_FILE="/var/log/dr_cron_manager.log"
 TMPFILE="/tmp/crontab_mgr_$$.txt"
 DRY_RUN=false
 STATUS_ONLY=false
+trap 'rm -f "${TMPFILE}"*; exit 1' INT TERM HUP
 
 # --- Argument parsing ---
 for arg in "$@"; do
@@ -57,7 +58,7 @@ if [ ! -f "$ROLE_FILE" ]; then
     exit 1
 fi
 
-ROLE=$(cat "$ROLE_FILE" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+ROLE=$(tr -d '[:space:]' < "$ROLE_FILE" | tr '[:lower:]' '[:upper:]')
 
 if [ "$ROLE" != "PRIMARY" ] && [ "$ROLE" != "STANDBY" ]; then
     log "ERROR: Invalid role '$ROLE' in $ROLE_FILE. Must be PRIMARY or STANDBY."
