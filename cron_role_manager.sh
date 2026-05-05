@@ -81,14 +81,14 @@ show_user_status() {
     fi
     
     # Check if there are any managed tags
-    if ! echo "$crontab_content" | grep -qE '#ALWAYS|#PRIMARY'; then
+    if ! echo "$crontab_content" | grep -iE '#ALWAYS|#PRIMARY' >/dev/null 2>&1; then
         return
     fi
     
     echo "  --- [ $target_user ] ---"
     echo "$crontab_content" | awk '
-        /#ALWAYS/  { gsub(/^####/, ""); print "  [ALWAYS  ] " $0 }
-        /#PRIMARY/ {
+        tolower($0) ~ /#always/  { gsub(/^####/, ""); print "  [ALWAYS  ] " $0 }
+        tolower($0) ~ /#primary/ {
             if (/^####/) {
                 line = $0; sub(/^####/, "", line)
                 print "  [DISABLED] " line
@@ -139,7 +139,7 @@ process_user() {
     fi
 
     # Check if there are any #PRIMARY tags to process
-    if ! grep -q '#PRIMARY' "$user_tmpfile"; then
+    if ! grep -i '#PRIMARY' "$user_tmpfile" >/dev/null 2>&1; then
         rm -f "$user_tmpfile"
         return
     fi
@@ -148,18 +148,22 @@ process_user() {
 
     # Apply role logic
     local WILL_CHANGE=0
+    # AIX compatibility: case-insensitive #PRIMARY match and literal space/tab instead of POSIX [[:space:]]
+    local P_TAG="#[Pp][Rr][Ii][Mm][Aa][Rr][Yy]"
+    local SP="[ 	]"
+    
     if [ "$ROLE" = "PRIMARY" ]; then
-        WILL_CHANGE=$(grep -c '^####.*#PRIMARY[[:space:]]*$' "$user_tmpfile" 2>/dev/null || echo 0)
+        WILL_CHANGE=$(grep -c "^####.*${P_TAG}${SP}*$" "$user_tmpfile" 2>/dev/null || echo 0)
         if [ "$WILL_CHANGE" -gt 0 ]; then
             log "  Lines to enable: $WILL_CHANGE"
-            sed "s/^####\(.*#PRIMARY[[:space:]]*\)$/\1/" "$user_tmpfile" > "${user_tmpfile}.new"
+            sed "s/^####\(.*${P_TAG}${SP}*\)$/\1/" "$user_tmpfile" > "${user_tmpfile}.new"
             mv "${user_tmpfile}.new" "$user_tmpfile"
         fi
     elif [ "$ROLE" = "STANDBY" ]; then
-        WILL_CHANGE=$(grep -c '^[^#].*#PRIMARY[[:space:]]*$' "$user_tmpfile" 2>/dev/null || echo 0)
+        WILL_CHANGE=$(grep -c "^[^#].*${P_TAG}${SP}*$" "$user_tmpfile" 2>/dev/null || echo 0)
         if [ "$WILL_CHANGE" -gt 0 ]; then
             log "  Lines to disable: $WILL_CHANGE"
-            sed "s/^\([^#].*#PRIMARY[[:space:]]*\)$/####\1/" "$user_tmpfile" > "${user_tmpfile}.new"
+            sed "s/^\([^#].*${P_TAG}${SP}*\)$/####\1/" "$user_tmpfile" > "${user_tmpfile}.new"
             mv "${user_tmpfile}.new" "$user_tmpfile"
         fi
     fi
