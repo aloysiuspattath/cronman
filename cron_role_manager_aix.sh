@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/ksh
 # =============================================================================
-# cron_role_manager.sh (Linux Optimized)
+# cron_role_manager_aix.sh (AIX Optimized)
 # DC-DR Cron Job Role Manager
 #
 # PURPOSE:
@@ -16,11 +16,11 @@
 #   Must contain either:  PRIMARY  or  STANDBY
 #
 # USAGE:
-#   ./cron_role_manager.sh              # uses /etc/server_role
-#   ./cron_role_manager.sh --dry-run    # preview changes without applying
-#   ./cron_role_manager.sh --status     # show current job classification
+#   ./cron_role_manager_aix.sh              # uses /etc/server_role
+#   ./cron_role_manager_aix.sh --dry-run    # preview changes without applying
+#   ./cron_role_manager_aix.sh --status     # show current job classification
 #
-# SUPPORTS: Linux
+# SUPPORTS: AIX
 # =============================================================================
 
 ROLE_FILE="/etc/server_role"
@@ -45,7 +45,7 @@ done
 
 # --- Logging ---
 log() {
-    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [cron_role_manager] $1"
+    msg="[$(date '+%Y-%m-%d %H:%M:%S')] [cron_role_manager] $1"
     echo "$msg"
     echo "$msg" >> "$LOG_FILE" 2>/dev/null
 }
@@ -69,9 +69,13 @@ log "Server: $HOSTNAME | Role: $ROLE"
 
 # --- Status mode ---
 show_user_status() {
-    local target_user="$1"
-    local crontab_content
-    crontab_content=$(crontab -u "$target_user" -l 2>/dev/null)
+    target_user="$1"
+    
+    if [ "$(id -un)" = "$target_user" ]; then
+        crontab_content=$(crontab -l 2>/dev/null)
+    else
+        crontab_content=$(crontab -l "$target_user" 2>/dev/null)
+    fi
     
     if [ -z "$crontab_content" ]; then
         return
@@ -99,20 +103,12 @@ show_user_status() {
 
 # --- Find valid users via spool ---
 get_spool_users() {
-    local spool_dir=""
-    if [ -d "/var/spool/cron/crontabs" ]; then
-        spool_dir="/var/spool/cron/crontabs"
-    elif [ -d "/var/spool/cron/tabs" ]; then
-        spool_dir="/var/spool/cron/tabs"
-    elif [ -d "/var/spool/cron" ]; then
-        spool_dir="/var/spool/cron"
-    fi
-
-    if [ -n "$spool_dir" ] && [ -r "$spool_dir" ]; then
+    spool_dir="/var/spool/cron/crontabs"
+    if [ -d "$spool_dir" ] && [ -r "$spool_dir" ]; then
         for f in "$spool_dir"/*; do
             [ -e "$f" ] || continue
             [ -f "$f" ] || continue
-            local fname=$(basename "$f")
+            fname=$(basename "$f")
             # Skip hidden files or backups
             case "$fname" in
                 .*|*~|*.bak) continue ;;
@@ -139,18 +135,22 @@ if [ "$STATUS_ONLY" = true ]; then
             show_user_status "$SYSTEM_USER"
         done
     else
-        show_user_status "$(whoami)"
+        show_user_status "$(id -un)"
     fi
     exit 0
 fi
 
 # --- Process User Function ---
 process_user() {
-    local target_user="$1"
-    local user_tmpfile="${TMPFILE}_${target_user}"
+    target_user="$1"
+    user_tmpfile="${TMPFILE}_${target_user}"
     
-    # Dump current crontab
-    crontab -u "$target_user" -l > "$user_tmpfile" 2>/dev/null
+    # Dump current crontab handling AIX where -u is not supported
+    if [ "$(id -un)" = "$target_user" ]; then
+        crontab -l > "$user_tmpfile" 2>/dev/null
+    else
+        crontab -l "$target_user" > "$user_tmpfile" 2>/dev/null
+    fi
     
     if [ ! -s "$user_tmpfile" ]; then
         rm -f "$user_tmpfile"
@@ -158,7 +158,7 @@ process_user() {
     fi
 
     # Check if there are any #PRIMARY tags to process
-    local P_TAG="#[Pp][Rr][Ii][Mm][Aa][Rr][Yy]"
+    P_TAG="#[Pp][Rr][Ii][Mm][Aa][Rr][Yy]"
     if ! grep "${P_TAG}" "$user_tmpfile" >/dev/null 2>&1; then
         rm -f "$user_tmpfile"
         return
@@ -167,7 +167,7 @@ process_user() {
     log "Processing crontab for user: $target_user"
 
     # Apply role logic
-    local WILL_CHANGE=0
+    WILL_CHANGE=0
     
     if [ "$ROLE" = "PRIMARY" ]; then
         WILL_CHANGE=$(grep -c "^####.*${P_TAG}" "$user_tmpfile" 2>/dev/null || echo 0)
@@ -194,10 +194,20 @@ process_user() {
         cat "$user_tmpfile"
         echo "  -----------------------------------------------------------"
     else
-        if crontab -u "$target_user" "$user_tmpfile" 2>/dev/null; then
-            log "  Crontab updated successfully for $target_user."
+        chown "$target_user" "$user_tmpfile"
+        if [ "$(id -un)" = "$target_user" ]; then
+            if crontab "$user_tmpfile" >/dev/null 2>&1; then
+                log "  Crontab updated successfully for $target_user."
+            else
+                log "  ERROR: Failed to apply crontab for $target_user."
+            fi
         else
-            log "  ERROR: Failed to apply crontab for $target_user."
+            # su without '-' to avoid executing interactive .profile scripts
+            if su "$target_user" -c "crontab $user_tmpfile" >/dev/null 2>&1; then
+                log "  Crontab updated successfully for $target_user."
+            else
+                log "  ERROR: Failed to apply crontab for $target_user."
+            fi
         fi
     fi
 
@@ -213,7 +223,7 @@ if [ "$(id -u)" -eq 0 ]; then
     done
 else
     # Running as a normal user
-    CURRENT_USER=$(whoami)
+    CURRENT_USER=$(id -un)
     log "Running as $CURRENT_USER. Updating personal crontab only."
     process_user "$CURRENT_USER"
 fi
