@@ -170,14 +170,16 @@ process_user() {
     local WILL_CHANGE=0
     
     if [ "$ROLE" = "PRIMARY" ]; then
-        WILL_CHANGE=$(grep -c "^####.*${P_TAG}" "$user_tmpfile" 2>/dev/null || echo 0)
+        WILL_CHANGE=$(grep -c "^####.*${P_TAG}" "$user_tmpfile" 2>/dev/null)
+        [ -z "$WILL_CHANGE" ] && WILL_CHANGE=0
         if [ "$WILL_CHANGE" -gt 0 ]; then
             log "  Lines to enable: $WILL_CHANGE"
             sed "/^####.*${P_TAG}/ s/^####//" "$user_tmpfile" > "${user_tmpfile}.new"
             mv "${user_tmpfile}.new" "$user_tmpfile"
         fi
     elif [ "$ROLE" = "STANDBY" ]; then
-        WILL_CHANGE=$(grep -c "^[^#].*${P_TAG}" "$user_tmpfile" 2>/dev/null || echo 0)
+        WILL_CHANGE=$(grep -c "^[^#].*${P_TAG}" "$user_tmpfile" 2>/dev/null)
+        [ -z "$WILL_CHANGE" ] && WILL_CHANGE=0
         if [ "$WILL_CHANGE" -gt 0 ]; then
             log "  Lines to disable: $WILL_CHANGE"
             sed "/^[^#].*${P_TAG}/ s/^/####/" "$user_tmpfile" > "${user_tmpfile}.new"
